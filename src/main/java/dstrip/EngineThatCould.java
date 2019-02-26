@@ -36,11 +36,15 @@ import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 class EngineThatCould extends PDFStreamEngine {
     // Stack of streams to keep track of which stream is currently being processed.
     LinkedList<PDContentStream> streamStack;
-    PDContentStream envelopeMarkerStream;
-    Integer envelopeMarkerColor;
+
+    PDContentStream watermarkStream;
     Integer watermarkColor;
-    int skipTextBlocks;
-    int watermarkTextBlocks;
+    // Index of current text block.
+    int textBlockIndex;
+    // Index of first text block which is part of the watermark.
+    int watermarkStartIndex;
+    // Index of last text block which is part of the watermark.
+    int watermarkEndIndex;
 
     public EngineThatCould() throws IOException {
         super();
@@ -71,16 +75,16 @@ class EngineThatCould extends PDFStreamEngine {
         addOperator(new ShowTextLineAndSpace());
     }
 
-    public int getSkipTextBlocks() {
-        return skipTextBlocks;
+    public int getWatermarkStartIndex() {
+        return watermarkStartIndex;
     }
 
-    public int getWatermarkTextBlocks() {
-        return watermarkTextBlocks;
+    public int getWatermarkEndIndex() {
+        return watermarkEndIndex;
     }
 
-    public PDContentStream getEnvelopeMarkerStream() {
-        return envelopeMarkerStream;
+    public PDContentStream getWatermarkStream() {
+        return watermarkStream;
     }
 
     @Override
@@ -88,50 +92,36 @@ class EngineThatCould extends PDFStreamEngine {
         resetState();
         beginStream(page);
         super.processPage(page);
-        streamStack.pop();
+        endStream();
     }
 
     @Override
     public void showForm(PDFormXObject form) throws IOException {
         beginStream(form);
         super.showForm(form);
-        streamStack.pop();
+        endStream();
     }
 
     @Override
     protected void showText(byte[] string) throws IOException {
-        if (envelopeMarkerColor == null) {
-            if (new String(string).startsWith("DocuSign Envelope ID: ")) {
-                envelopeMarkerColor = getTextColor();
-                // Find the stream to which this text belongs.
-                envelopeMarkerStream = streamStack.peekFirst();
+        if (watermarkColor == null) {
+            // If its color is not saved, the start of the watermark is yet to be found.
+            if (new String(string).startsWith("DEMONSTRATION DOCUMENT ONLY")) {
+                watermarkColor = getTextColor();
+                watermarkStartIndex = textBlockIndex;
+                // Save the stream to which the watermark belongs.
+                watermarkStream = streamStack.peekFirst();
             }
 
-            skipTextBlocks++;
-
-        } else {
-            if (watermarkColor == null) {
-                watermarkColor = getTextColor();
-
-                if (watermarkColor == envelopeMarkerColor) {
-                    throw new IllegalStateException("Invalid state encountered");
-                }
-
-                // This is the first part of the watermark to remove.
-                // Increment text counter.
-                watermarkTextBlocks++;
-
-            } else if (getTextColor() == watermarkColor) {
-                // Text color is the same; must be a continuation of the watermark.
-                // Increment text counter.
-                watermarkTextBlocks++;
-
-            } else {
-                // The color is not the same; the watermark must have ended. Set watermark
-                // color to an impossible value to prevent further matching.
-                watermarkColor = -1;
+        } else if (watermarkEndIndex == -1) {
+            if (getTextColor() != watermarkColor) {
+                // If the current text block has a differnet color than the watermark, then it marks
+                // the end of the watermark.
+                watermarkEndIndex = textBlockIndex;
             }
         }
+
+        textBlockIndex++;
     }
 
     private int getTextColor() throws IOException {
@@ -140,14 +130,25 @@ class EngineThatCould extends PDFStreamEngine {
 
     private void beginStream(PDContentStream stream) {
         streamStack.push(stream);
-        skipTextBlocks = 0;
+        // Since entering a new stream, reset the text block index.
+        textBlockIndex = 0;
+    }
+
+    private void endStream() {
+        streamStack.pop();
+
+        if (watermarkStartIndex >= 0 && watermarkEndIndex == -1) {
+            // If watermark was found but was the last text on the page, assign the end index
+            // manually.
+            watermarkEndIndex = textBlockIndex;
+        }
     }
 
     private void resetState() {
         streamStack = new LinkedList<>();
-        envelopeMarkerColor = null;
         watermarkColor = null;
-        skipTextBlocks = 0;
-        watermarkTextBlocks = 0;
+        textBlockIndex = -1;
+        watermarkStartIndex = -1;
+        watermarkEndIndex = -1;
     }
 }

@@ -1,5 +1,6 @@
 package dstrip;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -11,45 +12,64 @@ import org.junit.jupiter.api.Test;
 
 public class TextStripTest {
     @Test
-    public void testOriginalDocument() throws IOException {
-        try (var document = getDocument()) {
-            String text = getText(document, 1, 1);
-            // Make sure document has watermark.
-            assertTrue(text.contains("DEMONSTRATION DOCUMENT ONLY"));
-            // Make sure document has form data.
-            assertTrue(text.contains("John"));
-            assertTrue(text.contains("Smith"));
-        }
+    public void testMultiPage() throws IOException {
+        var text = getProcessedDocumentText("multi-page.pdf");
+        // Make sure final document has no watermark.
+        assertFalse(text.contains("DEMONSTRATION DOCUMENT ONLY"));
+        // Make sure final document retained non-watermark text.
+        assertTrue(text.contains("John"));
+        assertTrue(text.contains("Smith"));
+        assertTrue(text.contains("hello, world"));
+        assertTrue(text.contains("Follow the steps below"));
     }
 
     @Test
-    public void testProcessedDocument() throws IOException {
-        try (var document = getDocument()) {
-            Main.processDocument(document);
-            String text = getText(document, 1, 1);
-            // Make sure document no longer has watermark.
-            assertFalse(text.contains("DEMONSTRATION DOCUMENT ONLY"));
-            // Make sure document still has form data.
-            assertTrue(text.contains("John"));
-            assertTrue(text.contains("Smith"));
-        }
+    public void testTextBeforeWatermark() throws IOException {
+        var text = getProcessedDocumentText("text-before-watermark.pdf");
+        // Make sure final document has no watermark.
+        assertFalse(text.contains("DEMONSTRATION DOCUMENT ONLY"));
+        // Make sure final document retained non-watermark text.
+        assertTrue(text.contains("John"));
+        assertTrue(text.contains("Smith"));
     }
 
-    private PDDocument getDocument() throws IOException {
+    @Test
+    public void testNoTextBeforeWatermark() throws IOException {
+        var text = getProcessedDocumentText("no-text-before-watermark.pdf");
+        // Make sure final document has no watermark.
+        assertFalse(text.contains("DEMONSTRATION DOCUMENT ONLY"));
+        // Make sure final document retained non-watermark text.
+        assertTrue(text.contains("hello, world"));
+        assertTrue(text.contains("Some other text"));
+    }
+
+    @Test
+    public void testOnlyWatermark() throws IOException {
+        var text = getProcessedDocumentText("only-watermark.pdf");
+        assertEquals("", text.strip());
+    }
+
+    @Test
+    public void testNoWatermark() throws IOException {
+        var text = getProcessedDocumentText("no-watermark.pdf");
+        assertEquals("hello, world", text.strip());
+    }
+
+    @Test
+    public void testBlank() throws IOException {
+        var text = getProcessedDocumentText("blank.pdf");
+        assertEquals("", text.strip());
+    }
+
+    private String getProcessedDocumentText(String name) throws IOException {
         try (
             var stream = Thread.currentThread()
                 .getContextClassLoader()
-                .getResourceAsStream("signed.pdf");
+                .getResourceAsStream(name);
+            var document = PDDocument.load(stream);
         ) {
-            return PDDocument.load(stream);
+            Main.processDocument(document);
+            return new PDFTextStripper().getText(document);
         }
-    }
-
-    private String getText(PDDocument document, int startPage, int endPage) throws IOException {
-        var stripper = new PDFTextStripper();
-        // TODO: Extend test to multi-page PDFs.
-        stripper.setStartPage(startPage);
-        stripper.setEndPage(endPage);
-        return stripper.getText(document);
     }
 }

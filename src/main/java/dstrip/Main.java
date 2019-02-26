@@ -25,8 +25,6 @@ public class Main {
             return;
         }
 
-        // TODO: Enable logging to see PDFBox's messages.
-
         var inputFileName = args[0];
         var outputFileName = args[1];
         var inputFile = new File(inputFileName);
@@ -42,10 +40,15 @@ public class Main {
 
         for (var page : document.getPages()) {
             engine.processPage(page);
+            var oldStream = engine.getWatermarkStream();
 
-            int watermarkStart = engine.getSkipTextBlocks();
-            int watermarkEnd = watermarkStart + engine.getWatermarkTextBlocks();
-            var oldStream = engine.getEnvelopeMarkerStream();
+            if (oldStream == null) {
+                // If the watermark stream is null, the watermark was not found on this page. Skip.
+                continue;
+            }
+
+            int watermarkStartIndex = engine.getWatermarkStartIndex();
+            int watermarkEndIndex = engine.getWatermarkEndIndex();
             var newStream = new PDStream(document);
             var parser = new PDFStreamParser(oldStream);
 
@@ -61,8 +64,8 @@ public class Main {
                         ((Operator)token).getName().toLowerCase().equals("tj")
                     ) {
                         if (
-                            textBlockCounter >= watermarkStart &&
-                            textBlockCounter < watermarkEnd
+                            textBlockCounter >= watermarkStartIndex &&
+                            textBlockCounter < watermarkEndIndex
                         ) {
                             // Do not write the current token nor its previous argument.
                             token = prevToken = null;
