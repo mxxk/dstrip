@@ -22,7 +22,14 @@ COPY src ./src
 COPY pom.xml .
 RUN mvn package -DskipTests
 
+# Prepare directory for single copy command in derived image.
+RUN \
+    mkdir -p /final/opt && \
+    mv /jlinked /final/opt/jdk && \
+    mv /app/target/*-jar-with-dependencies.jar /final/main.jar
+
+
 FROM alpine:latest
-COPY --from=base /jlinked /opt/jdk
-COPY --from=base /app/target/*-jar-with-dependencies.jar /main.jar
+COPY --from=base /final /
+WORKDIR /mnt
 ENTRYPOINT ["/opt/jdk/bin/java", "-jar", "/main.jar"]
