@@ -1,2 +1,29 @@
 language: java
 jdk: openjdk11
+
+# Do not build tags (otherwise newly tagged releases get rebuilt).
+if: tag IS blank
+
+env:
+    - GIT_COMMIT_SHORT=$(git rev-parse --short HEAD)
+
+before_deploy:
+    # Name final artifact.
+    - REPO_NAME=$(basename "$PWD")
+    - cp target/*-jar-with-dependencies.jar "${REPO_NAME}.jar"
+    # Set up release tag.
+    - export TRAVIS_TAG="release-${GIT_COMMIT_SHORT}"
+    - git tag -f "$TRAVIS_TAG"
+
+deploy:
+    provider: releases
+    api_key: $GITHUB_TOKEN
+    skip_cleanup: true
+    file_glob: true
+    file: ./*.jar
+    name: "Commit ${GIT_COMMIT_SHORT}: $(TZ=UTC date +'%B %d, %Y %r')"
+
+    # Skip deploys from tags and branches other than the master
+    on:
+      branch: master
+      tags: false

@@ -20,9 +20,9 @@ ENV PATH="/opt/mvn/bin:${PATH}"
 WORKDIR /app
 COPY src ./src
 COPY pom.xml .
-RUN mvn package
+RUN mvn package -DskipTests
 
 FROM alpine:latest
 COPY --from=base /jlinked /opt/jdk
-COPY --from=base /app/target/*with-dependencies.jar /main.jar
+COPY --from=base /app/target/*-jar-with-dependencies.jar /main.jar
 ENTRYPOINT ["/opt/jdk/bin/java", "-jar", "/main.jar"]
